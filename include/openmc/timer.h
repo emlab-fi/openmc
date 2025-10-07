@@ -42,6 +42,7 @@ extern Timer time_update_src;
 class Timer {
 public:
   using clock = std::chrono::high_resolution_clock;
+  using time_point = clock::time_point;
 
   Timer() {};
 
@@ -57,6 +58,10 @@ public:
 
   //! Stop the timer and reset its elapsed time
   void reset();
+
+  //! Get the current time point
+  //! \return Current time point
+  std::chrono::time_point<clock> now();
 
 private:
   bool running_ {false};                 //!< is timer running?
