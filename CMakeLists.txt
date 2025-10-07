@@ -38,6 +38,7 @@ option(OPENMC_USE_LIBMESH     "Enable support for libMesh unstructured mesh tall
 option(OPENMC_USE_MPI         "Enable MPI"                                           OFF)
 option(OPENMC_USE_MCPL        "Enable MCPL"                                          OFF)
 option(OPENMC_USE_UWUW        "Enable UWUW"                                          OFF)
+option(OPENMC_ENABLE_XS_TRACE "Enable XS tracefile generation"                       OFF)
 
 message(STATUS "OPENMC_USE_OPENMP ${OPENMC_USE_OPENMP}")
 message(STATUS "OPENMC_BUILD_TESTS ${OPENMC_BUILD_TESTS}")
@@ -542,6 +543,10 @@ endif()
 if (OPENMC_ENABLE_COVERAGE)
   target_compile_definitions(libopenmc PRIVATE COVERAGEBUILD)
 endif()
+if (OPENMC_ENABLE_XS_TRACE)
+  target_compile_definitions(libopenmc PRIVATE XS_TRACE)
+endif()
+
 
 #===============================================================================
 # openmc executable

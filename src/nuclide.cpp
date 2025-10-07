@@ -24,6 +24,15 @@
 #include <cassert>
 #include <string> // for to_string, stoi
 
+#ifdef XS_TRACE
+#include "openmc/timer.h"
+#include <fstream>
+#endif
+
+#ifdef _OPENMP
+#include <omp.h>
+#endif
+
 namespace openmc {
 
 //==============================================================================
@@ -38,6 +47,72 @@ double temperature_max {0.0};
 std::unordered_map<std::string, int> nuclide_map;
 vector<unique_ptr<Nuclide>> nuclides;
 } // namespace data
+
+//==============================================================================
+// XS Trace Logging
+//==============================================================================
+#ifdef XS_TRACE
+namespace xs_trace {
+
+struct LogElement {
+  int nuc_atomic_number;
+  int nuc_mass_number;
+  double energy;
+  int index_temp_grid;
+  int lower_index;
+  openmc::Timer::time_point start;
+  openmc::Timer::time_point stop;
+};
+
+struct Trace {
+  using trace_thread_entry = std::vector<LogElement>;
+  std::vector<trace_thread_entry> entries;
+  std::vector<std::size_t> counters;
+
+  Trace()
+  {
+    entries.resize(omp_get_max_threads());
+    for (auto& entry : entries) {
+      entry.reserve(8000000);
+    }
+    counters.resize(omp_get_max_threads(), 0);
+  }
+
+  ~Trace()
+  {
+    std::cout << "Saving xs trace to files" << std::endl;
+#pragma omp parallel for
+    for (int i = 0; i < entries.size(); ++i) {
+      std::ofstream ofs("xs_trace.log.thread" + std::to_string(i));
+      for (const auto& log : entries[i]) {
+        ofs << log.nuc_atomic_number << " " << log.nuc_mass_number << " "
+            << log.energy << " " << log.index_temp_grid << " "
+            << log.lower_index << " " << log.start.time_since_epoch().count()
+            << " " << log.stop.time_since_epoch().count() << std::endl;
+      }
+      ofs.close();
+    }
+    std::cout << "Saved " << entries.size() << " entries" << std::endl;
+
+    for (const auto& count : counters) {
+      std::cout << count << " ";
+    }
+    std::cout << std::endl;
+  }
+
+  void log(int A, int Z, double E, int i_temp, int i_grid,
+    openmc::Timer::time_point start, openmc::Timer::time_point stop)
+  {
+    auto tid = omp_get_thread_num();
+    entries[tid].emplace_back(
+      LogElement {Z, A, E, i_temp, i_grid, start, stop});
+  }
+};
+
+static Trace xs_trace;
+
+} // namespace xs_trace
+#endif
 
 //==============================================================================
 // Nuclide implementation
@@ -721,6 +796,10 @@ void Nuclide::calculate_xs(
     const auto& grid {grid_[i_temp]};
     const auto& xs {xs_[i_temp]};
 
+#ifdef XS_TRACE
+    auto start = openmc::simulation::time_total.now();
+#endif
+
     int i_grid;
     if (p.E() < grid.energy.front()) {
       i_grid = 0;
@@ -748,6 +827,11 @@ void Nuclide::calculate_xs(
     micro.index_temp = i_temp;
     micro.index_grid = i_grid;
     micro.interp_factor = f;
+
+#ifdef XS_TRACE
+    auto stop = openmc::simulation::time_total.now();
+    xs_trace::xs_trace.log(Z_, A_, p.E(), i_temp, i_grid, start, stop);
+#endif
 
     // Calculate microscopic nuclide total cross section
     micro.total =
