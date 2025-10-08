@@ -83,21 +83,28 @@ struct Trace {
     std::cout << "Saving xs trace to files" << std::endl;
 #pragma omp parallel for
     for (int i = 0; i < entries.size(); ++i) {
-      std::ofstream ofs("xs_trace.log.thread" + std::to_string(i));
+      std::ofstream ofs("xs_trace.log.thread" + std::to_string(i),
+        std::ios::binary | std::ios::app);
       for (const auto& log : entries[i]) {
-        ofs << log.nuc_atomic_number << " " << log.nuc_mass_number << " "
-            << log.energy << " " << log.index_temp_grid << " "
-            << log.lower_index << " " << log.start.time_since_epoch().count()
-            << " " << log.stop.time_since_epoch().count() << std::endl;
+        ofs.write(
+          reinterpret_cast<const char*>(&log.nuc_atomic_number), sizeof(int));
+        ofs.write(
+          reinterpret_cast<const char*>(&log.nuc_mass_number), sizeof(int));
+        ofs.write(reinterpret_cast<const char*>(&log.energy), sizeof(double));
+        ofs.write(
+          reinterpret_cast<const char*>(&log.index_temp_grid), sizeof(int));
+        ofs.write(reinterpret_cast<const char*>(&log.lower_index), sizeof(int));
+        auto start_count = log.start.time_since_epoch().count();
+        ofs.write(reinterpret_cast<const char*>(&start_count),
+          sizeof(decltype(start_count)));
+        auto stop_count = log.stop.time_since_epoch().count();
+        ofs.write(reinterpret_cast<const char*>(&stop_count),
+          sizeof(decltype(stop_count)));
       }
       ofs.close();
     }
-    std::cout << "Saved " << entries.size() << " entries" << std::endl;
-
-    for (const auto& count : counters) {
-      std::cout << count << " ";
-    }
-    std::cout << std::endl;
+    std::cout << "Saved " << entries.size() << " logs (one per thread)"
+              << std::endl;
   }
 
   void log(int A, int Z, double E, int i_temp, int i_grid,
@@ -106,6 +113,12 @@ struct Trace {
     auto tid = omp_get_thread_num();
     entries[tid].emplace_back(
       LogElement {Z, A, E, i_temp, i_grid, start, stop});
+  }
+
+  void log(int A, int Z, double E, int i_temp, int i_grid)
+  {
+    auto tid = omp_get_thread_num();
+    entries[tid].emplace_back(LogElement {Z, A, E, i_temp, i_grid, {}, {}});
   }
 };
 
@@ -796,7 +809,7 @@ void Nuclide::calculate_xs(
     const auto& grid {grid_[i_temp]};
     const auto& xs {xs_[i_temp]};
 
-#ifdef XS_TRACE
+#ifdef XS_TRACE_TIMING
     auto start = openmc::simulation::time_total.now();
 #endif
 
@@ -827,11 +840,6 @@ void Nuclide::calculate_xs(
     micro.index_temp = i_temp;
     micro.index_grid = i_grid;
     micro.interp_factor = f;
-
-#ifdef XS_TRACE
-    auto stop = openmc::simulation::time_total.now();
-    xs_trace::xs_trace.log(Z_, A_, p.E(), i_temp, i_grid, start, stop);
-#endif
 
     // Calculate microscopic nuclide total cross section
     micro.total =
@@ -895,6 +903,13 @@ void Nuclide::calculate_xs(
         }
       }
     }
+#ifdef XS_TRACE_TIMING
+    auto stop = openmc::simulation::time_total.now();
+    xs_trace::xs_trace.log(Z_, A_, p.E(), i_temp, i_grid, start, stop);
+#endif
+#ifdef XS_TRACE
+    xs_trace::xs_trace.log(Z_, A_, p.E(), i_temp, i_grid);
+#endif
   }
 
   // Initialize sab treatment to false

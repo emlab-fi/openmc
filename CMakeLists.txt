@@ -39,6 +39,7 @@ option(OPENMC_USE_MPI         "Enable MPI"                                      
 option(OPENMC_USE_MCPL        "Enable MCPL"                                          OFF)
 option(OPENMC_USE_UWUW        "Enable UWUW"                                          OFF)
 option(OPENMC_ENABLE_XS_TRACE "Enable XS tracefile generation"                       OFF)
+option(OPENMC_ENABLE_XS_TRACE_TIMING "Enable timing logs for trace"                  OFF)
 
 message(STATUS "OPENMC_USE_OPENMP ${OPENMC_USE_OPENMP}")
 message(STATUS "OPENMC_BUILD_TESTS ${OPENMC_BUILD_TESTS}")
@@ -545,6 +546,9 @@ if (OPENMC_ENABLE_COVERAGE)
 endif()
 if (OPENMC_ENABLE_XS_TRACE)
   target_compile_definitions(libopenmc PRIVATE XS_TRACE)
+  if (OPENMC_ENABLE_XS_TRACE_TIMING)
+    target_compile_definitions(libopenmc PRIVATE XS_TRACE_TIMING)
+  endif()
 endif()
 
 
