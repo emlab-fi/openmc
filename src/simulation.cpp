@@ -222,6 +222,10 @@ int openmc_simulation_finalize()
   if (settings::check_overlaps)
     print_overlap_check();
 
+#ifdef XS_TRACE
+  openmc::xs_trace::restart_trace();
+#endif
+
   // Reset flags
   simulation::initialized = false;
   return 0;

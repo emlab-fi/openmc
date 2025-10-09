@@ -23,6 +23,44 @@
 
 namespace openmc {
 
+// ===============================================================================
+// XS Trace Logging
+// ===============================================================================
+#ifdef XS_TRACE
+namespace xs_trace {
+
+struct LogElement {
+  int nuc_atomic_number;
+  int nuc_mass_number;
+  double energy;
+  int index_temp_grid;
+  int lower_index;
+  uint64_t start;
+  uint64_t stop_energy;
+  uint64_t stop_total;
+};
+
+struct Trace {
+  using trace_thread_entry = std::vector<LogElement>;
+  std::vector<trace_thread_entry> entries;
+  std::vector<std::size_t> counters;
+
+  Trace();
+  ~Trace();
+  void dump_to_file();
+  void reset();
+  void log(int A, int Z, double E, int i_temp, int i_grid, uint64_t start,
+    uint64_t stop_energy, uint64_t stop_total);
+  void log(int A, int Z, double E, int i_temp, int i_grid);
+};
+
+extern Trace xs_trace;
+
+void restart_trace();
+
+} // namespace xs_trace
+#endif
+
 //==============================================================================
 // Data for a nuclide
 //==============================================================================

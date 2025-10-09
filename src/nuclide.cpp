@@ -25,8 +25,11 @@
 #include <string> // for to_string, stoi
 
 #ifdef XS_TRACE
-#include "openmc/timer.h"
 #include <fstream>
+#endif
+
+#ifdef XS_TRACE_TIMING
+#include <x86intrin.h>
 #endif
 
 #ifdef _OPENMP
@@ -54,75 +57,77 @@ vector<unique_ptr<Nuclide>> nuclides;
 #ifdef XS_TRACE
 namespace xs_trace {
 
-struct LogElement {
-  int nuc_atomic_number;
-  int nuc_mass_number;
-  double energy;
-  int index_temp_grid;
-  int lower_index;
-  openmc::Timer::time_point start;
-  openmc::Timer::time_point stop;
-};
-
-struct Trace {
-  using trace_thread_entry = std::vector<LogElement>;
-  std::vector<trace_thread_entry> entries;
-  std::vector<std::size_t> counters;
-
-  Trace()
-  {
-    entries.resize(omp_get_max_threads());
-    for (auto& entry : entries) {
-      entry.reserve(8000000);
-    }
-    counters.resize(omp_get_max_threads(), 0);
+Trace::Trace()
+{
+  entries.resize(omp_get_max_threads());
+  for (auto& entry : entries) {
+    entry.reserve(8000000);
   }
+  counters.resize(omp_get_max_threads(), 0);
+}
 
-  ~Trace()
-  {
-    std::cout << "Saving xs trace to files" << std::endl;
+Trace::~Trace()
+{
+  dump_to_file();
+}
+
+void Trace::dump_to_file()
+{
+  std::cout << "Saving xs trace to files" << std::endl;
 #pragma omp parallel for
-    for (int i = 0; i < entries.size(); ++i) {
-      std::ofstream ofs("xs_trace.log.thread" + std::to_string(i),
-        std::ios::binary | std::ios::app);
-      for (const auto& log : entries[i]) {
-        ofs.write(
-          reinterpret_cast<const char*>(&log.nuc_atomic_number), sizeof(int));
-        ofs.write(
-          reinterpret_cast<const char*>(&log.nuc_mass_number), sizeof(int));
-        ofs.write(reinterpret_cast<const char*>(&log.energy), sizeof(double));
-        ofs.write(
-          reinterpret_cast<const char*>(&log.index_temp_grid), sizeof(int));
-        ofs.write(reinterpret_cast<const char*>(&log.lower_index), sizeof(int));
-        auto start_count = log.start.time_since_epoch().count();
-        ofs.write(reinterpret_cast<const char*>(&start_count),
-          sizeof(decltype(start_count)));
-        auto stop_count = log.stop.time_since_epoch().count();
-        ofs.write(reinterpret_cast<const char*>(&stop_count),
-          sizeof(decltype(stop_count)));
-      }
-      ofs.close();
+  for (int i = 0; i < entries.size(); ++i) {
+    std::ofstream ofs("xs_trace.log.thread" + std::to_string(i),
+      std::ios::binary | std::ios::app);
+    for (const auto& log : entries[i]) {
+      ofs.write(
+        reinterpret_cast<const char*>(&log.nuc_atomic_number), sizeof(int));
+      ofs.write(
+        reinterpret_cast<const char*>(&log.nuc_mass_number), sizeof(int));
+      ofs.write(reinterpret_cast<const char*>(&log.energy), sizeof(double));
+      ofs.write(
+        reinterpret_cast<const char*>(&log.index_temp_grid), sizeof(int));
+      ofs.write(reinterpret_cast<const char*>(&log.lower_index), sizeof(int));
+      ofs.write(reinterpret_cast<const char*>(&log.start), sizeof(uint64_t));
+      ofs.write(
+        reinterpret_cast<const char*>(&log.stop_energy), sizeof(uint64_t));
+      ofs.write(
+        reinterpret_cast<const char*>(&log.stop_total), sizeof(uint64_t));
     }
-    std::cout << "Saved " << entries.size() << " logs (one per thread)"
-              << std::endl;
+    ofs.close();
   }
+  std::cout << "Saved " << entries.size() << " logs (one per thread)"
+            << std::endl;
+}
 
-  void log(int A, int Z, double E, int i_temp, int i_grid,
-    openmc::Timer::time_point start, openmc::Timer::time_point stop)
-  {
-    auto tid = omp_get_thread_num();
-    entries[tid].emplace_back(
-      LogElement {Z, A, E, i_temp, i_grid, start, stop});
+void Trace::reset()
+{
+  for (auto& entry : entries) {
+    entry.clear();
+    entry.reserve(8000000);
   }
+}
 
-  void log(int A, int Z, double E, int i_temp, int i_grid)
-  {
-    auto tid = omp_get_thread_num();
-    entries[tid].emplace_back(LogElement {Z, A, E, i_temp, i_grid, {}, {}});
-  }
-};
+void Trace::log(int A, int Z, double E, int i_temp, int i_grid, uint64_t start,
+  uint64_t stop_energy, uint64_t stop_total)
+{
+  auto tid = omp_get_thread_num();
+  entries[tid].emplace_back(
+    LogElement {Z, A, E, i_temp, i_grid, start, stop_energy, stop_total});
+}
 
-static Trace xs_trace;
+void Trace::log(int A, int Z, double E, int i_temp, int i_grid)
+{
+  auto tid = omp_get_thread_num();
+  entries[tid].emplace_back(LogElement {Z, A, E, i_temp, i_grid, {}, {}});
+}
+
+Trace xs_trace;
+
+void restart_trace()
+{
+  xs_trace.dump_to_file();
+  xs_trace.reset();
+}
 
 } // namespace xs_trace
 #endif
@@ -810,7 +815,8 @@ void Nuclide::calculate_xs(
     const auto& xs {xs_[i_temp]};
 
 #ifdef XS_TRACE_TIMING
-    auto start = openmc::simulation::time_total.now();
+    unsigned int ui;
+    uint64_t start = __rdtscp(&ui);
 #endif
 
     int i_grid;
@@ -840,6 +846,10 @@ void Nuclide::calculate_xs(
     micro.index_temp = i_temp;
     micro.index_grid = i_grid;
     micro.interp_factor = f;
+
+#ifdef XS_TRACE_TIMING
+    uint64_t stop_energy = __rdtscp(&ui);
+#endif
 
     // Calculate microscopic nuclide total cross section
     micro.total =
@@ -904,8 +914,9 @@ void Nuclide::calculate_xs(
       }
     }
 #ifdef XS_TRACE_TIMING
-    auto stop = openmc::simulation::time_total.now();
-    xs_trace::xs_trace.log(Z_, A_, p.E(), i_temp, i_grid, start, stop);
+    uint64_t stop_total = __rdtscp(&ui);
+    xs_trace::xs_trace.log(
+      Z_, A_, p.E(), i_temp, i_grid, start, stop_energy, stop_total);
 #endif
 #ifdef XS_TRACE
     xs_trace::xs_trace.log(Z_, A_, p.E(), i_temp, i_grid);
