@@ -66,11 +66,6 @@ Trace::Trace()
   counters.resize(omp_get_max_threads(), 0);
 }
 
-Trace::~Trace()
-{
-  dump_to_file();
-}
-
 void Trace::dump_to_file()
 {
   std::cout << "Saving xs trace to files" << std::endl;
@@ -917,9 +912,10 @@ void Nuclide::calculate_xs(
     uint64_t stop_total = __rdtscp(&ui);
     xs_trace::xs_trace.log(
       Z_, A_, p.E(), i_temp, i_grid, start, stop_energy, stop_total);
-#endif
+#else
 #ifdef XS_TRACE
     xs_trace::xs_trace.log(Z_, A_, p.E(), i_temp, i_grid);
+#endif
 #endif
   }
 

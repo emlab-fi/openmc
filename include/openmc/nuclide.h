@@ -46,7 +46,6 @@ struct Trace {
   std::vector<std::size_t> counters;
 
   Trace();
-  ~Trace();
   void dump_to_file();
   void reset();
   void log(int A, int Z, double E, int i_temp, int i_grid, uint64_t start,
