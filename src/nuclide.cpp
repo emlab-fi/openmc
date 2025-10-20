@@ -124,6 +124,17 @@ void restart_trace()
   xs_trace.reset();
 }
 
+void log_nuclide_temps(std::string& name, const vector<int>& temps)
+{
+  std::ofstream ofs("xs_trace_nuclide_temps.log", std::ios::app);
+  ofs << name;
+  for (const auto& t : temps) {
+    ofs << "," << t;
+  }
+  ofs << "\n";
+  ofs.close();
+}
+
 } // namespace xs_trace
 #endif
 
@@ -304,6 +315,10 @@ Nuclide::Nuclide(hid_t group, const vector<double>& temperature)
 
   // Sort temperatures to read
   std::sort(temps_to_read.begin(), temps_to_read.end());
+
+#ifdef XS_TRACE
+  xs_trace::log_nuclide_temps(name_, temps_to_read);
+#endif
 
   data::temperature_min =
     std::min(data::temperature_min, static_cast<double>(temps_to_read.front()));
