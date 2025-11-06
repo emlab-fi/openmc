@@ -26,6 +26,8 @@
 
 #ifdef XS_TRACE
 #include <fstream>
+#include <sys/types.h>
+#include <unistd.h>
 #endif
 
 #ifdef XS_TRACE_TIMING
@@ -71,7 +73,8 @@ void Trace::dump_to_file()
   std::cout << "Saving xs trace to files" << std::endl;
 #pragma omp parallel for
   for (int i = 0; i < entries.size(); ++i) {
-    std::ofstream ofs("xs_trace.log.thread" + std::to_string(i),
+    std::ofstream ofs("xs_trace.log.thread" + std::to_string(i) + "." +
+                        std::to_string(getpid()),
       std::ios::binary | std::ios::app);
     for (const auto& log : entries[i]) {
       ofs.write(
@@ -126,7 +129,7 @@ void restart_trace()
 
 void log_nuclide_temps(std::string& name, const vector<int>& temps)
 {
-  std::ofstream ofs("xs_trace_nuclide_temps.log", std::ios::app);
+  std::ofstream ofs("xs_trace_nuclide_temps.log." + std::to_string(getpid()));
   ofs << name;
   for (const auto& t : temps) {
     ofs << "," << t;
