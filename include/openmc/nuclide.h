@@ -44,6 +44,7 @@ struct Trace {
   using trace_thread_entry = std::vector<LogElement>;
   std::vector<trace_thread_entry> entries;
   std::vector<std::size_t> counters;
+  std::size_t current_run = 0;
 
   Trace();
   void dump_to_file();
