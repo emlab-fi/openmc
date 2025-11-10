@@ -25,6 +25,8 @@ if (CMAKE_VERSION VERSION_GREATER_EQUAL 3.22)
   cmake_policy(SET CMP0128 NEW)
 endif()
 
+set(GEM5_PATH "/opt/gem5")
+
 #===============================================================================
 # Command line options
 #===============================================================================
@@ -40,6 +42,7 @@ option(OPENMC_USE_MCPL        "Enable MCPL"                                     
 option(OPENMC_USE_UWUW        "Enable UWUW"                                          OFF)
 option(OPENMC_ENABLE_XS_TRACE "Enable XS tracefile generation"                       OFF)
 option(OPENMC_ENABLE_XS_TRACE_TIMING "Enable timing logs for trace"                  OFF)
+option(OPENMC_ENABLE_GEM5_OPS "Enable gem5ops for running inside gem5"               OFF)
 
 message(STATUS "OPENMC_USE_OPENMP ${OPENMC_USE_OPENMP}")
 message(STATUS "OPENMC_BUILD_TESTS ${OPENMC_BUILD_TESTS}")
@@ -544,6 +547,8 @@ endif()
 if (OPENMC_ENABLE_COVERAGE)
   target_compile_definitions(libopenmc PRIVATE COVERAGEBUILD)
 endif()
+
+
 if (OPENMC_ENABLE_XS_TRACE)
   target_compile_definitions(libopenmc PRIVATE XS_TRACE)
   if (OPENMC_ENABLE_XS_TRACE_TIMING)
@@ -551,6 +556,13 @@ if (OPENMC_ENABLE_XS_TRACE)
   endif()
 endif()
 
+if (OPENMC_ENABLE_GEM5_OPS)
+  target_compile_definitions(libopenmc PRIVATE USE_GEM5OPS)
+  target_link_directories(libopenmc PRIVATE ${GEM5_PATH}/util/m5/build/x86/out)
+  target_link_libraries(libopenmc ${GEM5_PATH}/util/m5/build/x86/out/libm5.a)
+  target_include_directories(libopenmc PRIVATE ${GEM5_PATH}/include ${GEM5_PATH}/util/m5/src)
+  target_compile_options(libopenmc PRIVATE -no-pie)
+endif()
 
 #===============================================================================
 # openmc executable
@@ -561,10 +573,17 @@ target_compile_options(openmc PRIVATE ${cxxflags})
 target_include_directories(openmc PRIVATE ${CMAKE_BINARY_DIR}/include)
 target_link_libraries(openmc libopenmc)
 
+if (OPENMC_ENABLE_GEM5_OPS)
+  target_compile_definitions(openmc PRIVATE USE_GEM5OPS)
+  #target_link_options(openmc PRIVATE -lm5 -L${GEM5_PATH}/util/m5/build/x86/out)
+  #target_compile_options(openmc PRIVATE -no-pie -lm5 -I${GEM5_PATH}/include -I${GEM5_PATH}/util/m5/src)
+endif()
+
 # Ensure C++17 standard is used and turn off GNU extensions
 target_compile_features(openmc PUBLIC cxx_std_17)
 target_compile_features(libopenmc PUBLIC cxx_std_17)
 set_target_properties(openmc libopenmc PROPERTIES CXX_EXTENSIONS OFF)
+
 
 #===============================================================================
 # Python package

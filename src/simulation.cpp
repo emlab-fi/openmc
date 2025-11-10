@@ -41,6 +41,10 @@
 #include <cmath>
 #include <string>
 
+#ifdef USE_GEM5OPS
+#include <gem5/m5ops.h>
+#endif
+
 //==============================================================================
 // C API functions
 //==============================================================================
@@ -735,6 +739,10 @@ void initialize_data()
   simulation::log_spacing =
     std::log(data::energy_max[neutron] / data::energy_min[neutron]) /
     settings::n_log_bins;
+
+#ifdef USE_GEM5OPS
+  m5_checkpoint(0, 0);
+#endif
 }
 
 #ifdef OPENMC_MPI
@@ -799,12 +807,20 @@ void transport_history_based_single_particle(Particle& p)
 
 void transport_history_based()
 {
+#ifdef USE_GEM5OPS
+  m5_work_begin(0, 0);
+#endif
+
 #pragma omp parallel for schedule(runtime)
   for (int64_t i_work = 1; i_work <= simulation::work_per_rank; ++i_work) {
     Particle p;
     initialize_history(p, i_work);
     transport_history_based_single_particle(p);
   }
+
+#ifdef USE_GEM5OPS
+  m5_work_end(0, 0);
+#endif
 }
 
 void transport_event_based()
