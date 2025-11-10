@@ -664,6 +664,11 @@ void calculate_work()
 
 void initialize_data()
 {
+// If we are generating a trace, force depletion to get worst case timing
+#ifdef XS_TRACE
+  simulation::need_depletion_rx = true;
+#endif
+
   // Determine minimum/maximum energy for incident neutron/photon data
   data::energy_max = {INFTY, INFTY};
   data::energy_min = {0.0, 0.0};
